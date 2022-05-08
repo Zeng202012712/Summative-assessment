@@ -1,0 +1,793 @@
+---
+title: "MY559 Final project"
+author: "Jingyuan Zeng"
+date: "8 May 2022"
+---
+
+1. Loading packages
+```{r}
+library(quanteda)
+library(haven)
+library(stringr)
+library("spacyr")
+spacy_initialize()
+library("dplyr")
+```
+
+
+2. Load raw data
+```{r}
+semi_patents <- read_stata("D:/temp/semi_patents_with_cited_times.dta")
+View(semi_patents)
+
+temp2 <- data.frame()
+for (i in 1976:2021){
+  temp <- read.delim(paste("D:/temp/rawclaimsdata/claims_", i, ".tsv", sep = ""), 
+                      encoding = "UTF-8", header = TRUE, sep = "\t")
+  temp <- merge(temp, semi_patents, by = intersect(names(temp),
+                                           names(semi_patents)))
+  
+  temp2 <- rbind(temp2, temp)
+  print(i)
+}
+
+saveRDS(temp2, file = "D:/temp/temp2.RDS")
+temp <- readRDS("D:/temp/temp2.RDS")
+```
+
+
+3. Save as rawpatentdata
+```{r}
+temp <- readRDS("D:/temp/temp2.RDS")
+
+temp$claim_sequence <- substr(temp$text,1,3) %>% str_replace_all(" ", "") %>% str_replace_all("[:punct:]", "") %>% strtoi() # obtain sequence
+
+temp <- temp[order(temp$patent_id, temp$claim_sequence),] # sort data
+
+#temp$text <- sub(".*?\n",'',temp$text)
+
+temp$text <- str_replace_all(temp$text, "\n", "") %>% str_replace_all("[\"]", "") %>% str_replace_all("_", " ")
+
+temp$text[2]   # show some examples
+rm(temp2)
+saveRDS(temp, file = "D:/temp/rawpatentdata.RDS")
+```
+
+
+
+4. Parse with SpaCy
+```{r}
+
+temp <- readRDS("D:/temp/rawpatentdata.RDS")
+###
+a <- temp$text[1:300000] %>% spacy_parse(tag = TRUE, pos = TRUE)
+saveRDS(a, file = "D:/temp/a1.RDS")
+a <- temp$text[300001:600000] %>% spacy_parse(tag = TRUE, pos = TRUE)
+saveRDS(a, file = "D:/temp/a2.RDS")
+a <- temp$text[600001:939453] %>% spacy_parse(tag = TRUE, pos = TRUE)
+saveRDS(a, file = "D:/temp/a3.RDS")
+```
+
+Create 2-grams from SpaCy
+#For a1
+```{r}
+a <- readRDS("D:/temp/a1.RDS")
+a$lemma[which(a$lemma %in% c("datum"))] <- "data"
+
+condition0 <- data.table::shift(a$token, n=1, type = "lag") == "-"
+
+a$token[which(condition0)] <- 
+  paste(a$token[which(condition0)-2],
+        a$token[which(condition0)-1],
+        a$token[which(condition0)], sep = "")    # Add hyphen
+a$pos[which(condition0)] <- "Hyphen"    # Add hyphen
+      
+condition1 <- a$pos == "NOUN" & 
+          (data.table::shift(a$pos, n=1, type = "lag") == "NOUN" |
+          data.table::shift(a$pos, n=1, type = "lag") == "ADJ" |
+          data.table::shift(a$pos, n=1, type = "lag") == "Hyphen")
+
+a$newtoken1 <- case_when(condition1
+          ~ paste(data.table::shift(a$token, n=1, type = "lag"), a$lemma, 
+          sep = "_"))   # stem the noun
+
+b <- a %>%
+  group_by(doc_id) %>%
+  mutate(text = paste(newtoken1, collapse = " "))
+
+temp <- readRDS("D:/temp/rawpatentdata.RDS")
+temp <- temp[1:300000,]
+
+temp$newtext <- b$text[!duplicated(b$doc_id)]
+
+rm(a,b)
+saveRDS(temp, file = "D:/temp/temp_a1.RDS")
+```
+
+#For a2
+```{r}
+a <- readRDS("D:/temp/a2.RDS")
+a$lemma[which(a$lemma %in% c("datum"))] <- "data"
+
+condition0 <- data.table::shift(a$token, n=1, type = "lag") == "-"
+
+a$token[which(condition0)] <- 
+  paste(a$token[which(condition0)-2],
+        a$token[which(condition0)-1],
+        a$token[which(condition0)], sep = "")    # Add hyphen
+a$pos[which(condition0)] <- "Hyphen"    # Add hyphen
+      
+condition1 <- a$pos == "NOUN" & 
+          (data.table::shift(a$pos, n=1, type = "lag") == "NOUN" |
+          data.table::shift(a$pos, n=1, type = "lag") == "ADJ" |
+          data.table::shift(a$pos, n=1, type = "lag") == "Hyphen")
+
+a$newtoken1 <- case_when(condition1
+          ~ paste(data.table::shift(a$token, n=1, type = "lag"), a$lemma, 
+          sep = "_"))
+
+b <- a %>%
+  group_by(doc_id) %>%
+  mutate(text = paste(newtoken1, collapse = " "))
+
+temp <- readRDS("D:/temp/rawpatentdata.RDS")
+temp <- temp[300001:600000,]
+
+temp$newtext <- b$text[!duplicated(b$doc_id)]
+
+rm(a,b)
+saveRDS(temp, file = "D:/temp/temp_a2.RDS")
+```
+
+#For a3
+```{r}
+a <- readRDS("D:/temp/a3.RDS")
+a$lemma[which(a$lemma %in% c("datum"))] <- "data"
+
+condition0 <- data.table::shift(a$token, n=1, type = "lag") == "-"
+
+a$token[which(condition0)] <- 
+  paste(a$token[which(condition0)-2],
+        a$token[which(condition0)-1],
+        a$token[which(condition0)], sep = "")    # Add hyphen
+a$pos[which(condition0)] <- "Hyphen"    # Add hyphen
+      
+condition1 <- a$pos == "NOUN" & 
+          (data.table::shift(a$pos, n=1, type = "lag") == "NOUN" |
+          data.table::shift(a$pos, n=1, type = "lag") == "ADJ" |
+          data.table::shift(a$pos, n=1, type = "lag") == "Hyphen")
+
+a$newtoken1 <- case_when(condition1
+          ~ paste(data.table::shift(a$token, n=1, type = "lag"), a$lemma, 
+          sep = "_"))
+
+b <- a %>%
+  group_by(doc_id) %>%
+  mutate(text = paste(newtoken1, collapse = " "))
+
+temp <- readRDS("D:/temp/rawpatentdata.RDS")
+temp <- temp[600001:939453,]
+
+temp$newtext <- b$text[!duplicated(b$doc_id)]
+
+rm(a,b)
+saveRDS(temp, file = "D:/temp/temp_a3.RDS")
+```
+
+#Rbind parsed data
+```{r}
+#Combine temp_a1 and temp_a2
+temp_a1 <- readRDS("D:/temp/temp_a1.RDS")
+temp_a2 <- readRDS("D:/temp/temp_a2.RDS")
+temp_a3 <- readRDS("D:/temp/temp_a3.RDS")
+
+temp_ngrams <- rbind(temp_a1,temp_a2,temp_a3)
+rm(temp_a1, temp_a2, temp_a3)
+saveRDS(temp_ngrams, file = "D:/temp/temp_ngrams.RDS")
+```
+
+
+
+
+5. Pre-processing corpus: tokenization and generating dfm
+```{r}
+library(quanteda)
+temp_ngrams <- readRDS("D:/temp/temp_ngrams.RDS")
+
+corp_bygrams <- corpus(temp_ngrams$newtext)
+corp_bygrams$patent_id <- temp_ngrams$patent_id
+corp_bygrams$target <- temp_ngrams$target
+corp_bygrams$year <- temp_ngrams$year
+corp_bygrams$organization <- temp_ngrams$organization
+
+docnames(corp_bygrams) <- as.character(temp_ngrams$patent_id)
+
+corp_bygrams <- corpus_group(corp_bygrams, groups = temp_ngrams$patent_id) # group the corpus
+
+toks <- corp_bygrams %>% tokens(remove_punct = TRUE, remove_numbers = TRUE,
+                remove_url =TRUE, remove_symbols = TRUE, padding = TRUE) %>%
+                tokens_tolower() #step1
+
+toks <- toks %>% tokens_select(pattern = c( "example", "figure", "table", "tab", "fig$", "claim", "compris", "includ", "having", "other", "said", "consist", "contain", "includ", "where", "^na$", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "type", "#"), selection = "remove", valuetype = "regex")
+
+toks <- toks %>% tokens_remove(stopwords("en"))
+
+dfm <- toks %>% dfm() %>% dfm_trim(min_docfreq = 20) %>% dfm_remove("")
+
+saveRDS(dfm, file = "D:/temp/dfm.RDS")
+dfm <- readRDS("D:/temp/dfm.RDS")
+
+```
+
+
+
+6. Descriptive statistics
+```{r}
+library(quanteda)
+library(ggplot2)
+library(dplyr)
+```
+
+#Counts of patent claims
+```{r}
+temp_ngrams <- readRDS("D:/temp/temp_ngrams.RDS")
+temp_ngrams$count <- 1
+
+#claims count over time
+claim_count <- aggregate(temp_ngrams$count, by=list(year=temp_ngrams$year, target=temp_ngrams$target), FUN=sum)
+
+
+#patent counts over time
+temp_ngrams <- temp_ngrams[which(temp_ngrams$claim_number==1),]
+patent_count <- aggregate(temp_ngrams$count, by=list(year=temp_ngrams$year, target=temp_ngrams$target), FUN=sum)
+
+#cbind() into one dataframe
+plot1 <- claim_count[1:31,c(1,3)] %>% rename(claim_count_nonsemi=x)
+plot2 <- claim_count[32:62,c(1,3)] %>% rename(claim_count_semi=x)
+plot3 <- patent_count[1:31,c(1,3)] %>% rename(patent_count_nonsemi=x)
+plot4 <- patent_count[32:62,c(1,3)] %>% rename(patent_count_semi=x)
+
+plot <- cbind(plot1, plot2, plot3, plot4)
+plot <- plot[,c(1,2,4,6,8)]
+
+rm(temp_ngrams, plot1, plot2, plot3, plot4, claim_count, patent_count)
+
+#Plot line graphs
+ggplot(data=plot, aes(x=year)) +
+  geom_line(aes(y = claim_count_semi, colour = "Semiconductor"))+
+  geom_line(aes(y = claim_count_nonsemi, colour = "Non-semiconductor"))+
+  geom_point(aes(y = claim_count_semi, colour = "Semiconductor"))+
+  geom_point(aes(y = claim_count_nonsemi, colour = "Non-semiconductor"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ theme_bw() +
+  labs(y= "Number of patent claims", x = "Year")
+
+ggplot(data=plot, aes(x=year)) +
+  geom_line(aes(y = patent_count_semi, colour = "Semiconductor"))+
+  geom_line(aes(y = patent_count_nonsemi, colour = "Non-semiconductor"))+
+  geom_point(aes(y = patent_count_semi, colour = "Semiconductor"))+
+  geom_point(aes(y = patent_count_nonsemi, colour = "Non-semiconductor"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ theme_bw() +
+  labs(y= "Number of patents", x = "Year")
+
+
+```
+
+#Counts of topfeatures
+```{r}
+dfm <- readRDS("D:/temp/dfm.RDS")
+df <- topfeatures(dfm[which(dfm@docvars$target==1),],n=30, scheme = "docfreq") %>% data.frame()
+df$feature <-topfeatures(dfm[which(dfm@docvars$target==1),],n=30) %>% names()
+df$wordfrequency=df$.
+df <- df[,2:3]
+
+ggplot(data=df, aes(x=reorder(feature, -wordfrequency), y=wordfrequency,fill=reorder(feature, -wordfrequency))) +geom_bar(stat="identity")+ theme(axis.text.x = element_text(angle = 60, hjust = 1))+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ labs(y= "Document frequency", x = "Top features")+
+  theme(legend.position="none")
+
+```
+
+
+
+
+7. supervised learning Buzzword detection
+#Preparation of data
+```{r}
+library("glmnet")
+
+#Assign to training and test sets
+dfm <- readRDS("D:/temp/dfm.RDS")
+dfm_x <- dfm[which(dfm@docvars$year %in% c(1980: 2010)),]  %>% dfm_trim(min_docfreq = 20) %>% dfm_select(pattern = c("^_", "^is", "step"), selection = "remove", valuetype = "regex") %>% dfm_select(pattern = "_", selection = "keep", valuetype = "regex")
+
+saveRDS(dfm_x, file = "D:/temp/dfm_x_all.RDS")
+
+#create random sample
+dfm_x@docvars$sample <- sample(c("train","test"),size = ndoc(dfm_x), prob=c(0.8, 0.2), replace = TRUE)
+
+dfm_x_train <- dfm_x[which(dfm_x@docvars$sample == "train"),]
+dfm_x_test <- dfm_x[which(dfm_x@docvars$sample == "test"),]
+
+saveRDS(dfm_x_train, file = "D:/temp/dfm_x_train.RDS")
+saveRDS(dfm_x_test, file = "D:/temp/dfm_x_test.RDS")
+
+
+# function to compute performance metrics
+precrecall <- function(mytable, verbose=TRUE) {
+    truePositives <- mytable[1,1]
+    falsePositives <- sum(mytable[1,]) - truePositives
+    falseNegatives <- sum(mytable[,1]) - truePositives
+    precision <- truePositives / (truePositives + falsePositives)
+    recall <- truePositives / (truePositives + falseNegatives)
+    if (verbose) {
+        print(mytable)
+        cat("\n precision =", round(precision, 2), 
+            "\n    recall =", round(recall, 2), "\n")
+    }
+    invisible(c(precision, recall))
+}
+
+
+```
+
+#Read the data for supervised learning
+```{r}
+dfm_x_all <- readRDS("D:/temp/dfm_x_all.RDS")
+dfm_x_train <- readRDS("D:/temp/dfm_x_train.RDS")
+dfm_x_test <- readRDS("D:/temp/dfm_x_test.RDS")
+```
+
+#Lasso
+```{r}
+lasso <- cv.glmnet(x= dfm_x_train,
+                   y= dfm_x_train@docvars$target,
+                   alpha=1, nfolds =5, family = "binomial")
+
+pred_lasso <- predict(lasso, dfm_x_test, type="class")
+cm <- table(pred_lasso, dfm_x_test@docvars$target)
+
+# precision and recall
+precrecall(cm)
+# accuracy
+sum(diag(cm)) / sum(cm)
+
+
+#Fit text model for the full sample
+lasso <- cv.glmnet(x= dfm_x_all,
+                   y= dfm_x_all@docvars$target,
+                   alpha=1, nfolds =5, family = "binomial")
+best.lambda <- which(lasso$lambda==lasso$lambda.1se)
+beta_lasso <- lasso$glmnet.fit$beta[,best.lambda] %>% sort(decreasing = TRUE)
+beta_lasso %>% head(30) %>% names()
+```
+
+#ridge
+```{r}
+library("glmnet")
+
+ridge <- cv.glmnet(x= dfm_x_train,
+                   y= dfm_x_train@docvars$target,
+                   alpha=0, nfolds =5, family = "binomial")
+
+pred_ridge <- predict(ridge, dfm_x_test, type="class")
+cm <- table(pred_ridge, dfm_x_test@docvars$target)
+
+# precision and recall
+precrecall(cm)
+# accuracy
+sum(diag(cm)) / sum(cm)
+
+
+#Fit text model for the full sample
+ridge <- cv.glmnet(x= dfm_x_all,
+                   y= dfm_x_all@docvars$target,
+                   alpha=0, nfolds =5, family = "binomial")
+best.lambda <- which(ridge$lambda==ridge$lambda.1se)
+beta_ridge <- ridge$glmnet.fit$beta[,best.lambda] %>% sort(decreasing = TRUE)
+beta_ridge %>% head(30) %>% names()
+```
+
+#Baynes
+```{r}
+library("quanteda.textmodels")
+
+nb <- textmodel_nb(dfm_x_train,
+                   dfm_x_train@docvars$target)
+
+pred_nb <- predict(nb, dfm_x_test)
+cm <- table(pred_nb, dfm_x_test@docvars$target)
+
+# precision and recall
+precrecall(cm)
+# accuracy
+sum(diag(cm)) / sum(cm)
+
+
+#Fit text model for the full sample
+nb <- textmodel_nb(dfm_x_all,
+                   dfm_x_all@docvars$target)
+
+coef(nb)[,1] %>% sort(decreasing = TRUE) %>% head(20)
+
+coef(nb)[,2] %>% sort(decreasing = TRUE) %>% head(20)
+
+```
+
+
+
+8. Dictionary
+#obtain claim-level dfm
+```{r}
+library(quanteda)
+temp_ngrams <- readRDS("D:/temp/temp_ngrams.RDS")
+temp_ngrams <- temp_ngrams[which(temp_ngrams$target == 1),]
+
+corp_bygrams <- corpus(temp_ngrams$newtext)
+corp_bygrams$patent_id <- temp_ngrams$patent_id
+corp_bygrams$target <- temp_ngrams$target
+corp_bygrams$year <- temp_ngrams$year
+corp_bygrams$organization <- temp_ngrams$organization
+corp_bygrams$firm_year <- paste(corp_bygrams$year, corp_bygrams$organization, sep = "" )
+
+docnames(corp_bygrams) <- as.character(temp_ngrams$patent_id)
+
+#corp_bygrams <- corp_bygrams[which(corp_bygrams$year %in% c(2000:2010)),]
+corp_bygrams <- corpus_group(corp_bygrams, groups = temp_ngrams$organization) # group the corpus
+
+
+
+toks <- corp_bygrams %>% tokens(remove_punct = TRUE, remove_numbers = TRUE,
+                remove_url =TRUE, remove_symbols = TRUE, padding = TRUE) %>%
+                tokens_tolower() #step1
+
+toks <- toks %>% tokens_select(pattern = c( "example", "figure", "table", "tab", "fig$", "claim", "compris", "includ", "having", "other", "said", "consist", "contain", "includ", "where", "^na$", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "type", "#"), selection = "remove", valuetype = "regex")
+
+#toks <- toks %>% tokens_select(pattern = "_", selection = "keep", valuetype = "regex") 
+
+toks <- toks %>% tokens_remove(stopwords("en"))
+
+dfm <- toks %>% dfm() %>% dfm_remove("")
+
+dfm_H01L<- dfm %>% dfm_select(pattern = c("^_", "^is", "step"), selection = "remove", valuetype = "regex") %>% dfm_select(pattern = "_", selection = "keep", valuetype = "regex")
+
+dfm_H01L_byfirms <- dfm_subset(dfm_H01L, ntoken(dfm_H01L) > 0)
+
+saveRDS(dfm_H01L_byfirms, file = "D:/temp/dfm_H01L_byfirms.RDS")
+rm(toks, dfm_H01L, corp_bygrams, temp_ngrams, dfm)
+```
+
+#Create generic and specialized dictionary
+```{r}
+#Read data
+dfm_H01L_byfirms <- readRDS("D:/temp/dfm_H01L_byfirms.RDS")
+
+#obtain the quantiles (top/bottom 10% as threshold)
+poster_2 <- coef(nb)[which(coef(nb)[,2] >= quantile(coef(nb)[,2],0.9) ),]
+generic_words <- coef(nb)[which(coef(nb)[,1] >= quantile(coef(nb)[,1],0.9) ),]
+nongeneric_words <- coef(nb)[which(coef(nb)[,1] <= quantile(coef(nb)[,1],0.1) ),]
+
+# intersect with lasso and ridge
+name_lasso <- beta_lasso %>% head(858) %>% names()
+name_ridge <- beta_ridge %>% head(858) %>% names()
+
+spec_dic <- intersect(rownames(nongeneric_words), rownames(poster_2))
+spec_dic <- intersect(spec_dic,name_lasso)
+spec_dic <- intersect(spec_dic,name_ridge)
+saveRDS(spec_dic, "D:/temp/spec_dic.RDS")
+
+generic_dic <- intersect(rownames(generic_words), rownames(poster_2))
+saveRDS(generic_dic, "D:/temp/generic_dic.RDS")
+
+
+coef(nb)[spec_dic,] %>% write.csv("D:/temp/spec_dic.csv")
+coef(nb)[generic_dic,] %>% write.csv("D:/temp/generic_dic.csv")
+coef(nb) %>% data.frame() %>% write.csv("D:/temp/coef_nb.csv" )
+```
+
+#Apply the two dictionaries to the claim-level dfm
+```{r}
+spec_dic <- readRDS("D:/temp/spec_dic.RDS")
+generic_dic <- readRDS("D:/temp/generic_dic.RDS")
+corp <- c("Tokyo Electron Limited","LSI Logic Corporation","Taiwan Semiconductor Manufacturing Co., Ltd.","Mitsubishi Denki Kabushiki Kaisha","Hitachi, Ltd.","Applied Materials, Inc.","NEC Corporation","Advanced Micro Devices, Inc.","Sony Corporation","Infineon Technologies AG","Samsung Display Co., Ltd.","Texas Instruments Incorporated","Intel Corporation","Semiconductor Energy Laboratory Co., Ltd.","Kabushiki Kaisha Toshiba","Samsung Electronics Co., Ltd.","Micron Technology, Inc.","International Business Machines Corporation")
+
+#create dictionary
+myDic <- dictionary(list(specialized = spec_dic, generic = generic_dic))
+
+dfm_H01L_byfirms <- readRDS("D:/temp/dfm_H01L_byfirms.RDS")
+dfm_H01L_byfirms <- dfm_H01L_byfirms %>% dfm_weight(scheme = "prop") #normalize
+
+dfm_H01L_lookedup <- dfm_lookup(dfm_H01L_byfirms, myDic)
+
+# align into dataframe
+specialized_firm <- dfm_sort(dfm_H01L_lookedup[,"specialized"], margin = "documents") %>% data.frame()
+generic_firm <- dfm_sort(dfm_H01L_lookedup[,"generic"], margin = "documents") %>% data.frame()
+both_firm <- merge(generic_firm, specialized_firm)
+both_firm <- both_firm[which(both_firm$doc_id %in% corp),]
+
+both_firm <- both_firm %>% rename(Organizations = doc_id)
+```
+
+#plot
+```{r}
+library(tidyverse)
+ggplot(both_firm, aes(x=Organizations, y=generic, fill=Organizations))+
+  geom_bar(stat = "identity")+
+  theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ 
+  theme(
+  axis.text.x = element_blank())+ theme(
+  axis.text.x = element_blank())+
+  labs(y= "General knowledge", x = "Organizations")
+
+ggplot(both_firm, aes(x=Organizations, y=specialized, fill=Organizations))+
+  geom_bar(stat = "identity")+
+  theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ 
+  theme(
+  axis.text.x = element_blank())+ theme(
+  axis.text.x = element_blank())+
+  labs(y= "Specialized knowledge", x = "Organizations")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+9. Structual topic model
+# Load packages
+```{r}
+library("stm")
+library("tidyverse")
+library("stringi")
+library("lubridate")
+library("quanteda")
+library("word2vec")
+library("tm")
+```
+
+# Pre-processing corpus: tokenization and generating dfm
+```{r}
+library(quanteda)
+temp <- readRDS("D:/temp/rawpatentdata.RDS")
+
+pcorpus <- corpus(temp$text)
+pcorpus$patent_id <- temp$patent_id
+pcorpus$target <- temp$target
+pcorpus$year <- temp$year
+
+docnames(pcorpus) <- as.character(temp$patent_id)
+
+pcorpus <- corpus_group(pcorpus, groups = temp$patent_id) # group the corpus
+
+toks_temp <- pcorpus %>% tokens(remove_punct = TRUE, remove_numbers = TRUE,
+                remove_url =TRUE, remove_symbols = TRUE, padding = TRUE) %>%
+                tokens_tolower() #step1
+
+saveRDS(toks_temp, file = "D:/temp/toks_temp.RDS")
+toks_temp <- readRDS("D:/temp/toks_temp.RDS")
+
+
+toks_temp <- toks_temp %>% tokens_select(pattern = c( "example", "figure", "table", "tab", "fig$", "claim", "compris", "includ", "having", "other", "said", "consist", "contain", "includ", "^na$", "where"), selection = "remove", valuetype = "regex") %>% tokens_remove(stopwords("en"))
+
+dfm_temp <- toks_temp %>% dfm() %>% dfm_trim(min_docfreq = 20)
+dfm_temp <- dfm_temp %>% dfm_remove("")
+
+
+#toks <- toks %>% tokens_wordstem()  # word stem by grams
+saveRDS(dfm_temp, file = "D:/temp/dfm_temp.RDS")
+dfm_temp <- readRDS("D:/temp/dfm_temp.RDS")
+
+```
+
+#Selecting the best K
+```{r}
+dfm <- readRDS("D:/temp/dfm.RDS")
+dfm_H01L<- dfm[which(dfm@docvars$target == 1),] %>% dfm_trim(min_docfreq = 20) %>% dfm_select(pattern = c("^_", "^is", "step"), selection = "remove", valuetype = "regex") %>% dfm_select(pattern = "_", selection = "keep", valuetype = "regex")
+
+dfm_H01L <- dfm_subset(dfm_H01L, ntoken(dfm_H01L) > 0)
+stm_input <- convert(dfm_H01L, to = "stm")
+
+# Get the best K
+k_search_output <- searchK(stm_input$documents, stm_input$vocab,
+                           K = c(5,10,20,30,40,50), data = stm_input$meta,
+                           verbose = FALSE, heldout.seed = 123)
+saveRDS(k_search_output, file = "D:/temp/k_search_output.RDS")
+k_search_output <- readRDS("D:/temp/k_search_output.RDS")
+
+k <- k_search_output[["results"]][,1] %>% as.numeric() %>% data.frame()
+k<-rename(k,K=.)
+k$residual <- k_search_output[["results"]][,"residual"] %>% as.numeric()
+k$heldout <- k_search_output[["results"]][,4] %>% as.numeric()
+
+ggplot(data=k, aes(x=K, y=heldout, group=1)) +
+  geom_line()+
+  geom_point()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ theme_bw() +
+  labs(y= "Held-out likelihood", x = "Number of topics")
+
+ggplot(data=k, aes(x=K, y=residual, group=1)) +
+  geom_line()+
+  geom_point()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ theme_bw() +
+  labs(y= "Residual", x = "Number of topics")
+
+```
+
+#Plot structual topic model
+```{r}
+
+stmmodel_cov <- stm(stm_input$documents, stm_input$vocab, K = 40, 
+                prevalence =~ c(year),
+                data = stm_input$meta, seed = 123, verbose = FALSE, 
+                init.type = "Spectral")
+
+saveRDS(stmmodel_cov, file = "D:/temp/stmmodel_cov.RDS")
+stmmodel_cov <- readRDS("D:/temp/stmmodel_cov.RDS")
+
+toLDAvis(stmmodel_cov, docs = stm_input$documents)
+
+effect_estimates <- estimateEffect(1:40 ~ s(year), stmmodel_cov, meta = stm_input$meta)
+
+plot(effect_estimates, "year", method = "continuous", topics = 22,
+     model = stmmodel_cov, printlegend = FALSE, xlim = c(1980, 2010), xlab = "Year", ylim = c(0,0.1),
+     main = "Topic 32: integrated circuit")
+
+plot(effect_estimates, "year", method = "continuous", topics = 30,
+     model = stmmodel_cov, printlegend = FALSE, xlim = c(1980, 2010), xlab = "Year", ylim = c(0,0.1),
+     main = "Topic 16: memory device and computer system")
+
+plot(effect_estimates, "year", method = "continuous", topics = 5,
+     model = stmmodel_cov, printlegend = FALSE, xlim = c(1980, 2010), xlab = "Year", ylim = c(0,0.1),
+     main = "Topic 12: conductive layor")
+
+plot(effect_estimates, "year", method = "continuous", topics = 14,
+     model = stmmodel_cov, printlegend = FALSE, xlim = c(1980, 2010), xlab = "Year", ylim = c(0,0.1),
+     main = "Topic 37: fabrication and etching")
+
+plot(effect_estimates, "year", method = "continuous", topics = 1,
+     model = stmmodel_cov, printlegend = FALSE, xlim = c(1980, 2010), xlab = "Year", ylim = c(0,0.1),
+     main = "Topic 36: heat and thermal science")
+
+plot(effect_estimates, "year", method = "continuous", topics = 16,
+     model = stmmodel_cov, printlegend = FALSE, xlim = c(1980, 2010), xlab = "Year", ylim = c(0,0.1),
+     main = "Topic 16: oxide layer")
+
+plot(effect_estimates, "year", method = "continuous", topics = 17,
+     model = stmmodel_cov, printlegend = FALSE, xlim = c(1980, 2010), xlab = "Year", ylim = c(0,0.1),
+     main = "Topic 23: optical property")
+
+plot(effect_estimates, "year", method = "continuous", topics = 40,
+     model = stmmodel_cov, printlegend = FALSE, xlim = c(1980, 2010), xlab = "Year", ylim = c(0,0.1),
+     main = "Topic 5: chemical vapor")
+
+plot(effect_estimates, "year", method = "continuous", topics = 3,
+     model = stmmodel_cov, printlegend = FALSE, xlim = c(1980, 2010), xlab = "Year", ylim = c(0,0.1),
+     main = "Topic 1: film transistor")
+
+plot(effect_estimates, "year", method = "continuous", topics = 20,
+     model = stmmodel_cov, printlegend = FALSE, xlim = c(1980, 2010), xlab = "Year", ylim = c(0,0.1),
+     main = "Topic 34: carbon nanotube")
+```
+
+
+10. Word embedding (wordvec) to understand the evolution of the meaning of key tech buzzwords
+#Preprocessing
+```{r}
+library("word2vec")
+library("tm")
+
+temp_ngrams <- readRDS("D:/temp/temp_ngrams.RDS")
+temp_ngrams <- temp_ngrams[which(temp_ngrams$target == 1),]
+
+temp_ngrams$newtext <- temp_ngrams$newtext %>% str_replace_all("NA", "") %>% tolower() %>% removeNumbers() %>% stripWhitespace() %>% trimws()
+temp_ngrams$newtext<- gsub('semiconductor_[a-z]+', 'semiconductor', temp_ngrams$newtext)
+temp_ngrams$newtext<- gsub('[a-z]+_semiconductor', 'semiconductor', temp_ngrams$newtext)
+
+#Year differentiation for semiconductor_device
+#1
+temp_ngrams$newtext[which(temp_ngrams$year %in% c(1980:1990))] <- str_replace_all(temp_ngrams$newtext[which(temp_ngrams$year %in% c(1980:1990))], "semiconductor", "semiconductor(1980s)")
+
+temp_ngrams$newtext[which(temp_ngrams$year %in% c(1991:2000))] <- str_replace_all(temp_ngrams$newtext[which(temp_ngrams$year %in% c(1991:2000))], "semiconductor", "semiconductor(1990s)")
+
+temp_ngrams$newtext[which(temp_ngrams$year %in% c(2001:2010))] <- str_replace_all(temp_ngrams$newtext[which(temp_ngrams$year %in% c(2001:2010))], "semiconductor", "semiconductor(2000s)")
+
+temp_ngrams <- temp_ngrams[which(temp_ngrams$newtext !=""),]
+
+word2vec_model_withtime <- word2vec(x = temp_ngrams$newtext, type = "skip-gram", dim = 300, window = 10, split = " ")
+#saveRDS(word2vec_model_withtime ,"D:/temp/word2vec_model_withtime.RDS")
+
+#Read
+#word2vec_model_withtime <- readRDS("D:/temp/word2vec_model_withtime.RDS")
+embedding_matrix <- as.matrix(word2vec_model_withtime)
+head(embedding_matrix[,1:2])
+
+embedding_matrix["semiconductor(1990s)",1:2]
+```
+
+#Start to embed
+```{r}
+#Start to embed
+spec_dic <- readRDS("D:/temp/spec_dic.RDS")
+generic_dic <- readRDS("D:/temp/generic_dic.RDS")
+
+#Specialized knowledge
+spec_name <- intersect(spec_dic, rownames(embedding_matrix)) %>% head(40)
+
+wv0 <- embedding_matrix[c(spec_name),2] %>%  as.character() %>% data.frame()
+wv0$words <- rownames(embedding_matrix[c(spec_name),])
+wv0$pc1 <- embedding_matrix[c(spec_name),1]
+wv0$pc2 <- embedding_matrix[c(spec_name),2]
+wv0 <- wv0[,2:4]
+wv0$type <- "Specialized knowledge"
+
+#Generic knowledge
+name <- NULL
+name <- c("semiconductor(1980s)","semiconductor(1990s)","semiconductor(2000s)")
+
+generic_name <- c(name, generic_dic) %>% head(40)
+generic_name <- intersect(generic_name, rownames(embedding_matrix))
+
+wv <- embedding_matrix[c(generic_name),2] %>%  as.character() %>% data.frame()
+wv$words <- rownames(embedding_matrix[c(generic_name),])
+wv$pc1 <- embedding_matrix[c(generic_name),1]
+wv$pc2 <- embedding_matrix[c(generic_name),2]
+wv <- wv[,2:4]
+wv$type <- "Generic knowledge"
+wv$type[1:3] <- "Semiconductor"  
+
+
+wv <- rbind(wv, wv0)
+wv$type <- as.character(wv$type)
+rm(wv0)
+```
+
+#plotting
+```{r}
+#plotting
+library("ggplot2")
+wv<-wv[order(wv$type, decreasing = FALSE),]
+wv <- wv %>% rename(Label=type)
+
+wv_generic<-wv[which(wv$Label != "Specialized knowledge"),]
+wv_specialized<-wv[which(wv$Label != "Generic knowledge"),]
+
+ggplot(wv_generic) + 
+  geom_text(aes(pc1, pc2, label=words, color=Label))+
+scale_color_manual(values=c("#00CCFF","#CC0033")) +
+  theme_bw() + xlim(-2,3) + ylim(-2,2)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ 
+  theme(
+  axis.text.x = element_blank(),
+  axis.text.y = element_blank())+ theme(
+  axis.text.x = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks = element_blank())+
+  labs(y= "PC 2", x = "PC 1")
+
+
+
+
+ggplot(wv_specialized) + 
+  geom_text(aes(pc1, pc2, label=words, color=Label))+
+scale_color_manual(values=c("#CC0033","#00CCFF")) +
+  theme_bw() + xlim(-2,3) + ylim(-2,2)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ 
+  theme(
+  axis.text.x = element_blank(),
+  axis.text.y = element_blank())+ theme(
+  axis.text.x = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks = element_blank())+
+  labs(y= "PC 2", x = "PC 1")
+```
+
